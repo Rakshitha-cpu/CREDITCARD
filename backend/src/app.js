@@ -3,6 +3,9 @@ import helmet from 'helmet';
 import cors from 'cors';
 import morgan from 'morgan';
 import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import fs from 'fs';
 
 import { errorHandler } from './middleware/errorHandler.js';
 import { apiLimiter, authLimiter } from './middleware/rateLimiter.js';
@@ -27,10 +30,17 @@ dotenv.config();
 
 const app = express();
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const frontendDistPath = path.resolve(__dirname, '../../dist');
+
 // Security & Logging Middlewares
-app.use(helmet());
+app.use(helmet({
+  contentSecurityPolicy: false,
+  crossOriginEmbedderPolicy: false,
+}));
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
+  origin: process.env.CORS_ORIGIN || true,
   credentials: true,
 }));
 app.use(express.json());
@@ -69,9 +79,24 @@ app.use('/api/audit-logs', auditRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/settings', settingsRoutes);
 
-// 404 handler for unknown routes
+// Serve built static frontend files if available (in production)
+if (fs.existsSync(frontendDistPath)) {
+  app.use(express.static(frontendDistPath));
+}
+
+// 404 handler for unknown API routes
 app.use('/api/*', (req, res) => {
   res.status(404).json({ success: false, message: `API route ${req.originalUrl} not found.` });
+});
+
+// Single Page Application client-side routing fallback
+app.get('*', (req, res, next) => {
+  const indexPath = path.join(frontendDistPath, 'index.html');
+  if (fs.existsSync(indexPath)) {
+    res.sendFile(indexPath);
+  } else {
+    next();
+  }
 });
 
 // Centralized Error Handler
