@@ -1,0 +1,57 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+@import "tailwindcss";
+
+:root {
+  --navy: #1e3a5f;
+  --navy-dark: #152c4a;
+  --navy-light: #2a4f7a;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  background-color: #f4f6f9;
+  color: #1a2332;
+  margin: 0;
+  padding: 0;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+::-webkit-scrollbar-thumb {
+  background: #c1c9d4;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #a0aab4;
+}
+
+/* Toast animations */
+@keyframes slideInRight {
+  from { transform: translateX(100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+@keyframes fadeOut {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+.toast-enter { animation: slideInRight 0.3s ease-out; }
+.toast-exit { animation: fadeOut 0.3s ease-out; }
+
+/* Table hover */
+tr:hover td { background-color: #f8fafc; }
+
+/* Sidebar transition */
+.sidebar-transition { transition: width 0.25s ease; }
+
+/* Chart tooltip */
+.recharts-tooltip-wrapper { z-index: 50 !important; }

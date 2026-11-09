@@ -1,0 +1,315 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  SALES
+  FINANCE
+  FINANCE_MANAGER
+}
+
+enum CustomerStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum RiskCategory {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum InvoiceStatus {
+  UNPAID
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+enum PaymentMethod {
+  NEFT
+  RTGS
+  IMPS
+  CHEQUE
+  UPI
+  DD
+}
+
+enum PaymentStatus {
+  ALLOCATED
+  PARTIAL
+  UNALLOCATED
+}
+
+enum RequestStatus {
+  PENDING
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+  EXPIRED
+}
+
+enum ApprovalAction {
+  APPROVED
+  REJECTED
+  MORE_INFO_REQUESTED
+}
+
+enum AlertType {
+  WARNING_70
+  CRITICAL_85
+  LIMIT_100
+  EXCEEDED_OVER_100
+  OVERDUE_DEFAULT
+}
+
+model User {
+  id              String           @id @default(uuid())
+  email           String           @unique
+  passwordHash    String
+  name            String
+  role            Role             @default(FINANCE)
+  status          String           @default("ACTIVE")
+  lastLogin       DateTime?
+  creditRequests  CreditRequest[]  @relation("SubmittedByUser")
+  approvalRecords ApprovalRecord[] @relation("ApprovedByUser")
+  auditLogs       AuditLog[]       @relation("AuditUser")
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  @@index([email])
+}
+
+model Customer {
+  id                String               @id @default(uuid())
+  customerCode      String               @unique
+  companyName       String
+  contactPerson     String
+  email             String
+  phone             String
+  businessCategory  String
+  city              String
+  address           String?
+  gstNo             String?
+  status            CustomerStatus       @default(ACTIVE)
+  creditProfile     CreditProfile?
+  creditLimitHist   CreditLimitHistory[]
+  invoices          Invoice[]
+  payments          Payment[]
+  creditRequests    CreditRequest[]
+  riskAssessments   RiskAssessment[]
+  creditAlerts      CreditAlert[]
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+
+  @@index([companyName])
+  @@index([customerCode])
+}
+
+model CreditProfile {
+  id                      String       @id @default(uuid())
+  customerId              String       @unique
+  customer                Customer     @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  approvedCreditLimit     Decimal      @db.Decimal(14, 2)
+  maxPermissibleExposure  Decimal      @db.Decimal(14, 2)
+  paymentTerms            String       @default("Net 30")
+  riskScore               Int          @default(15)
+  riskCategory            RiskCategory @default(LOW)
+  currentExposure         Decimal      @default(0) @db.Decimal(14, 2)
+  availableCredit         Decimal      @default(0) @db.Decimal(14, 2)
+  paymentBehavior         String       @default("Good")
+  isBlocked               Boolean      @default(false)
+  lastAssessmentDate      DateTime     @default(now())
+  createdAt               DateTime     @default(now())
+  updatedAt               DateTime     @updatedAt
+}
+
+model CreditLimitHistory {
+  id            String   @id @default(uuid())
+  customerId    String
+  customer      Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  previousLimit Decimal  @db.Decimal(14, 2)
+  newLimit      Decimal  @db.Decimal(14, 2)
+  reason        String
+  updatedBy     String
+  createdAt     DateTime @default(now())
+
+  @@index([customerId])
+}
+
+model Invoice {
+  id                String              @id @default(uuid())
+  invoiceNumber     String              @unique
+  customerId        String
+  customer          Customer            @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  invoiceDate       DateTime
+  dueDate           DateTime
+  invoiceAmount     Decimal             @db.Decimal(14, 2)
+  paidAmount        Decimal             @default(0) @db.Decimal(14, 2)
+  outstandingAmount Decimal             @db.Decimal(14, 2)
+  status            InvoiceStatus       @default(UNPAID)
+  allocations       PaymentAllocation[]
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  @@index([customerId])
+  @@index([status])
+  @@index([dueDate])
+}
+
+model Payment {
+  id                   String              @id @default(uuid())
+  paymentNumber        String              @unique
+  customerId           String
+  customer             Customer            @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  paymentDate          DateTime
+  paymentMethod        PaymentMethod       @default(NEFT)
+  transactionReference String              @unique
+  paymentAmount        Decimal             @db.Decimal(14, 2)
+  allocatedAmount      Decimal             @default(0) @db.Decimal(14, 2)
+  unallocatedAmount    Decimal             @default(0) @db.Decimal(14, 2)
+  status               PaymentStatus       @default(UNALLOCATED)
+  allocations          PaymentAllocation[]
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+
+  @@index([customerId])
+  @@index([paymentDate])
+}
+
+model PaymentAllocation {
+  id          String   @id @default(uuid())
+  paymentId   String
+  payment     Payment  @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  invoiceId   String
+  invoice     Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  amount      Decimal  @db.Decimal(14, 2)
+  allocatedBy String?
+  allocatedAt DateTime @default(now())
+
+  @@index([paymentId])
+  @@index([invoiceId])
+}
+
+model CreditRequest {
+  id                    String           @id @default(uuid())
+  requestNumber         String           @unique
+  customerId            String
+  customer              Customer         @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  currentLimit          Decimal          @db.Decimal(14, 2)
+  requestedLimit        Decimal          @db.Decimal(14, 2)
+  additionalAmount      Decimal          @db.Decimal(14, 2)
+  currentExposure       Decimal          @db.Decimal(14, 2)
+  projectedExposure     Decimal          @db.Decimal(14, 2)
+  businessJustification String
+  validityPeriod        DateTime
+  status                RequestStatus    @default(PENDING)
+  submittedById         String?
+  submittedBy           User?            @relation("SubmittedByUser", fields: [submittedById], references: [id])
+  requestDate           DateTime         @default(now())
+  rejectionReason       String?
+  approvalComment       String?
+  approvalRecords       ApprovalRecord[]
+  createdAt             DateTime         @default(now())
+  updatedAt             DateTime         @updatedAt
+
+  @@index([customerId])
+  @@index([status])
+}
+
+model ApprovalRecord {
+  id              String         @id @default(uuid())
+  creditRequestId String
+  creditRequest   CreditRequest  @relation(fields: [creditRequestId], references: [id], onDelete: Cascade)
+  approvedById    String
+  approvedBy      User           @relation("ApprovedByUser", fields: [approvedById], references: [id])
+  action          ApprovalAction
+  comment         String?
+  createdAt       DateTime       @default(now())
+
+  @@index([creditRequestId])
+}
+
+model RiskAssessment {
+  id                  String       @id @default(uuid())
+  customerId          String
+  customer            Customer     @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  riskScore           Int
+  riskCategory        RiskCategory
+  utilizationScore    Int          @default(0)
+  overdueScore        Int          @default(0)
+  paymentHistoryScore Int          @default(0)
+  agingScore          Int          @default(0)
+  calculationDetails  String?
+  assessedAt          DateTime     @default(now())
+
+  @@index([customerId])
+}
+
+model RiskScoreConfiguration {
+  id                   String   @id @default(uuid())
+  utilizationWeight    Int      @default(35)
+  overdueWeight        Int      @default(35)
+  paymentHistoryWeight Int      @default(20)
+  agingWeight          Int      @default(10)
+  lowThreshold         Int      @default(20)
+  mediumThreshold      Int      @default(50)
+  updatedAt            DateTime @updatedAt
+}
+
+model CreditAlert {
+  id           String    @id @default(uuid())
+  customerId   String
+  customer     Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  alertType    AlertType
+  severity     String
+  message      String
+  isDismissed  Boolean   @default(false)
+  dismissedAt  DateTime?
+  createdAt    DateTime  @default(now())
+
+  @@index([customerId])
+  @@index([isDismissed])
+}
+
+model AuditLog {
+  id            String   @id @default(uuid())
+  userId        String?
+  user          User?    @relation("AuditUser", fields: [userId], references: [id])
+  userName      String
+  userRole      String
+  action        String
+  entityType    String
+  entityId      String
+  previousValue String?
+  newValue      String?
+  remarks       String?
+  timestamp     DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@index([timestamp])
+}
+
+model Notification {
+  id            String   @id @default(uuid())
+  recipientRole String?
+  title         String
+  message       String
+  isRead        Boolean  @default(false)
+  link          String?
+  createdAt     DateTime @default(now())
+}
+
+model SystemSetting {
+  id          String   @id @default(uuid())
+  key         String   @unique
+  value       String
+  description String?
+  updatedAt   DateTime @updatedAt
+}
