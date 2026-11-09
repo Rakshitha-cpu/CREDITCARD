@@ -1,6 +1,7 @@
 import app from './app.js';
 import dotenv from 'dotenv';
 import prisma from './config/db.js';
+import { execSync } from 'child_process';
 
 dotenv.config();
 
@@ -9,6 +10,18 @@ let server;
 
 async function startServer() {
   try {
+    // In production, ensure database schema is applied and seeded
+    if (process.env.NODE_ENV === 'production' && process.env.DATABASE_URL) {
+      try {
+        console.log('🔄 Checking database schema and running migrations...');
+        execSync('npx prisma db push --skip-generate', { stdio: 'inherit' });
+        console.log('🌱 Checking seed data...');
+        execSync('node prisma/seed.js', { stdio: 'inherit' });
+      } catch (syncErr) {
+        console.warn('⚠️ Auto-sync note:', syncErr.message);
+      }
+    }
+
     // Verify database connectivity
     await prisma.$connect();
     console.log('✅ PostgreSQL database connected successfully via Prisma.');
